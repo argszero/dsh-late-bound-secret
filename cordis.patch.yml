@@ -1,0 +1,88 @@
+# The @argszero/dsh-late-bound-secret bundle patch: mount and go.
+#
+# A session that needs a credential has two bad options today.
+#
+# Paste the value into the message: it becomes durable. It enters the session
+# log, the model context, and every tool that later reads the log, and a durable
+# row cannot be recalled. Keep it in a `.env` in the project directory: a new leak
+# surface, one `git add` or one sync away from somewhere it should not be. The
+# result in practice is "either unsafe, or not used".
+#
+# The gap this plugin covers is narrower than the environment-variable module a
+# settings page would build, and it is the case that module does not reach: a
+# value that has to appear **literally** — in a command argument, an
+# `Authorization` header, a connection string — rather than through `$NAME`.
+# There, the model itself has to receive the value, so what can be protected is
+# not the request but the **record**.
+#
+# So the value and the text that names it are split. The operator declares
+# secrets; what travels is the reference:
+#
+#   {{secret:GH_TOKEN}}
+#
+# and the plugin rewrites in exactly two places, in opposite directions.
+#
+# **Outbound** — the `llm/stream` waterfall:
+#
+#   packages/llm/llm/src/index.ts
+#     stream(options) { return this.streamWithRegistration(options) }
+#     streamWithRegistration(options) { return this.ctx.waterfall(this, 'llm/stream', options, () => this.adapterStream(options)) }
+#
+# A loop-built request arrives deep frozen — the waterfall's contract is that its
+# content is a pure function of the session log, so listeners read it and never
+# rewrite it — and `next` takes no argument. The only way to hand the adapter a
+# different request is to ask the runtime for a stream of that request:
+# `ctx.llm.stream(replacement)`. That re-enters this same waterfall, so the
+# listener sees its own replacement; identity is what stops it, and every object
+# this plugin builds is recorded in a `WeakSet`. A request already recorded is
+# passed to `next()` untouched, and a request with no reference in it never
+# leaves the ordinary path at all.
+#
+# **Inbound** — `Session.append`, the single acceptance boundary of the durable
+# log:
+#
+#   packages/core/session/src/index.ts
+#     append(type, data, ...opts) { const dataSnapshot = snapshotJsonValue(data); ... this.commit(event, entry) }
+#
+# A plugin cannot wrap that function, but it can shadow it on the instance:
+# `append` is a prototype method, and an own-property assignment in front of it
+# intercepts every call made through the object. The assignment is confirmed by
+# reading the property back, because a refusal to write is not always a throw —
+# assigning to a frozen object silently does nothing in sloppy mode, and a guard
+# that believed it had installed would report success while rewriting nothing.
+# This is the same install/read-back/restore discipline this task's own
+# `@argszero/dsh-cancel-cause-guard` ships, on the same method.
+#
+# Both halves are needed. Binding alone leaves the value reaching durability
+# through every path the request seam does not own — a tool whose output echoes
+# it, a `curl -v`, a header log. Masking alone leaves the model with a reference
+# it cannot use. Together they produce one rule, and it is the rule the suite
+# asserts: after a full turn, the value appears in the outbound request and in no
+# durable row.
+#
+# The plugin has no runtime dependency: it subscribes to events the harness
+# dispatches and shadows a method it finds on an object, so it never imports a
+# harness package for value. That is deliberate — in a `profile` deployment a
+# plugin's own dependency can materialize a second copy of a harness package, a
+# failure this repository has already shipped more than once.
+#
+# `mode: 'guard'` (the default) rewrites in both directions. `observe` decides and
+# counts exactly as `guard` would and changes nothing, which is how an operator
+# finds out whether their declared values actually appear in a log before
+# trusting the rewrite with them; `off` installs neither listener nor shadow.
+# `{{lateBoundSecret}}` serves `snapshot()` — the declared **names**, never a
+# value, and the plugin's own blind spots on every read.
+#
+# Declare secrets with `secrets` inline (a harness-managed profile or an overlay,
+# never a tracked file) or with `refs` naming process environment variables. A
+# value shorter than `minLength` (8 by default) is refused by name rather than
+# half-applied, because masking with a short value damages more text than it
+# protects.
+
+- insert:
+    - id: late-bound-secret
+      name: '@argszero/dsh-late-bound-secret'
+      config:
+        mode: guard
+        refs:
+          - DEEPSEEK_API_KEY

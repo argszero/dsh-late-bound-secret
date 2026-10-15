@@ -1,0 +1,74 @@
+{
+  "name": "@argszero/dsh-late-bound-secret",
+  "description": "Keeps a declared secret's value out of the durable session log. A message, a command line or a tool argument carries only a reference - {{secret:NAME}} - and this plugin binds the value to that reference at the one moment it is needed (the outbound llm/stream request) while rewriting the value back to the reference on its way into the session log (a shadowed Session.append). Both halves are the same rule from opposite ends, so a value an operator registered as a secret cannot become durable, while the model still receives something it can use. The gap this covers is the case neither of the two existing paths handles: a value that has to appear literally, in a command argument or a header, rather than through an environment variable. Zero runtime dependencies, fail-open, no sandbox changes.",
+  "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/argszero/dsh-late-bound-secret.git"
+  },
+  "homepage": "https://github.com/argszero/dsh-late-bound-secret#readme",
+  "bugs": {
+    "url": "https://github.com/argszero/dsh-late-bound-secret/issues"
+  },
+  "keywords": [
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "secret",
+    "credentials",
+    "redaction",
+    "masking",
+    "late-binding",
+    "session-log",
+    "llm-stream"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-llm": ">=0.1.7-rc.2 <0.2.0 || >=0.2.0-rc.2 <0.2.1 || >=0.2.1-alpha.3 <0.2.2",
+    "@deepseek-ai/dsh-session": ">=0.1.7-rc.2 <0.2.0 || >=0.2.0-rc.2 <0.2.1 || >=0.2.1-alpha.3 <0.2.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-llm": "^0.2.1-alpha.3",
+    "@types/node": "^24.19.1",
+    "typescript": "^5.9.3",
+    "@deepseek-ai/dsh-session": "^0.2.1-alpha.3"
+  },
+  "scripts": {
+    "build": "tsc",
+    "pretest": "tsc",
+    "test": "node --test \"test/*.spec.mjs\"",
+    "test:inject": "node scripts/inject-defects.mjs",
+    "prepublishOnly": "tsc"
+  },
+  "engines": {
+    "node": "^22.19 || >=24"
+  }
+}
